@@ -12,16 +12,23 @@ app.set('view engine', 'ejs');
 app.use(express.json()); // middleware: transforma el cuerpo del body en json
 app.use(cookieParser());
 
-app.get('/', (req, res) => {
+app.use((req, res, next) => {
     const token = req.cookies.access_token;
-    if (!token) return res.render('index');
-    
+
+    // añadir información a la petición para poder acceder a la propiedad en cualquier end point más adelante
+    req.session = { user: null };
+
     try {
         const data = jwt.verify(token, SECRET_JWT_KEY);
-        res.render('index', data); // { _id, username }
-    } catch (error) {
-        res.render('index');    
-    }
+        req.session.user = data;
+    } catch {}
+
+    next();
+});
+
+app.get('/', (req, res) => {
+    const { user } = req.session;
+    res.render('index', user);
 });
 
 app.post('/login', async (req, res) => {
@@ -33,6 +40,14 @@ app.post('/login', async (req, res) => {
             SECRET_JWT_KEY,
             { expiresIn: '1h'}
         );
+
+        // refresh token y tambien hay que guardarlo en una cookie- hay que renovarlo cada cierto tiempo
+        const refreshToken = jwt.sign(
+            { id: user._id, username: user.username }, 
+            SECRET_JWT_KEY,
+            { expiresIn: '7d'}
+        );
+
         res.cookie('access_token', token, {
                 httpOnly: true, // la cookie solo se puede acceder en el servidor
                 secure: process.env.NODE_ENV === 'production', // solo se puede acceder en https
@@ -58,22 +73,16 @@ app.post('/register', async (req, res) => {
     }
 });
 
-app.post('/logout', (req, res) => {});
+app.post('/logout', (req, res) => {
+    res.clearCookie('access_token')
+       .json({ message: 'Logout successful' });
+});
 
 app.get('/protected', (req, res) => {
-    const token = req.cookies.access_token;
-    if (!token) {
-        return res.status(403).send('Access not authorized');
-    }
-    // todo: if sesión del usuario
-    try {
-        const data = jwt.verify(token, SECRET_JWT_KEY);
-        res.render('protected', data); // { _id, username }
-    } catch (error) {
-        return res.status(401).send('Access not authorized');
-    }
-    res.render('protected', { username: 'alfonso' });
-    // todo: else 401
+    const { user } = req.session;
+    if (!user) return res.status(403).send('Access not authorized');   
+
+    res.render('protected', user); // { _id, username }
 });
 
 app.listen(PORT, () => {
