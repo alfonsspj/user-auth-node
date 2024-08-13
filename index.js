@@ -3,13 +3,31 @@ import { PORT } from './config.js';
 import { UserRepository } from './user-repository.js';
 
 const app = express();
+
+// Indicar que sistema de plantillas se va a usar
+app.set('view engine', 'ejs');
+
 app.use(express.json()); // middleware: transforma el cuerpo del body en json
 
 app.get('/', (req, res) => {
-    res.send('hello');
+    res.render('index');
 });
 
-app.post('/login', (req, res) => {});
+app.get('/protected', (req, res) => {
+    // todo: if sesión del usuario
+    res.render('protected');
+    // todo: else 401
+})
+
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+    try {
+        const user = await UserRepository.login({ username, password });
+        res.send({ user });
+    } catch (error) {
+        res.status(401).send(error.message);
+    }
+});
 
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
